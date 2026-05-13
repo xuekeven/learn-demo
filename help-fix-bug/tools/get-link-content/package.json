@@ -1,0 +1,19 @@
+{
+  "name": "get-link-content",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Puppeteer: prefer Google Chrome for Testing (macOS), then Chrome/Edge/Chromium; persist profile; output text/HTML for AI",
+  "bin": {
+    "get-link-content": "./get-link-content.mjs"
+  },
+  "scripts": {
+    "get": "node get-link-content.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "puppeteer": "^24.4.0"
+  }
+}

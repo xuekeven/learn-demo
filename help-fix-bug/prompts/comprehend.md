@@ -3,53 +3,72 @@
 ## 开场白
 
 ```
-您好，我来帮您排查解决问题。请您提供足够多的信息，让我尽可能多的了解 bug 产生的背景和现象，这样我才能更快更好地解决 bug。
+您好，我来帮您排查解决 bug。请您提供足够的信息，让我尽可能多的了解 bug 产生的背景和现象。
 
 现在我需要问您 3 个问题：
 ```
 
 ## 问题序列
 
-### Q1：bug所在版本（必填）
+### Q1：bug所在基线（必填）
+
+#### 用户交互
 
 ```
-这个 bug 出现在哪个版本/分支？如 main / master / test / 1.0.0 等。我需要确认 bug 发生的版本/分支，以便之后使用相对应的版本/分支新建分支，然后在新建的分支分析和修改代码。
+1、这个 bug 出现在哪个代码基线上？我需要以此为起点新建分支，并在其上分析和修改 bug。请给出本仓库里能唯一定位到那一次代码的 Git 起点，任选其一即可：
 
-输入为空，认为 bug 出现在当前 git 默认的版本/分支。
+- **branch**：如 main、master、test、release/1.x；
+- **tag**：如 v1.0.0、1.2.5（若在仓库中为该版本打过 tag）；也可写 `refs/tags/v1.0.0` 等形式；
+- **commit**：完整或简短 commit SHA；
+- **origin**：如 origin/main、`origin/feature/foo`（需本地已 fetch 后能解析）。
+
+像 `1.0.0`、`1.2.5` 这类「版本号」只有当仓库里存在**同名或可推断的 tag**（脚本会依次尝试多种常见 tag 命名）时才算有效；若只是 package.json 里的版本、从未打过 tag，请改用分支名或 SHA，或请先打 tag。
+
+输入为空，认为 bug 出现在当前检出分支（HEAD / 默认分支）。
 ```
 
-**解析字段**：
-- 用户输入记为 bug_appear_version
+#### 解析字段
 
-**验证**：
-- bug_appear_version 为空，则赋值 bug_appear_version 为当前 git 默认的版本/分支，进入下一个问题
-- bug_appear_version 不为空，需要确认当前 git 的版本/分支存在 bug_appear_version，否则向用户提示 `没有您输入的${bug_appear_version}版本/分支，请重新输入`，要求用户重新输入，直到用户输入的 bug_appear_version 存在，进入下一个问题
+- 用户输入记为 `bug_appear_baseline`
+
+#### 验证
+
+- `bug_appear_baseline` 为空，则赋值 `bug_appear_baseline` 为当前检出分支或可解析为当前 HEAD 的 ref（可与「当前默认分支」同义），进入下一个问题
+- `bug_appear_baseline` 不为空时，须在**当前克隆的仓库内**能被 Git 解析为有效对象（在终端使用 `git rev-parse --verify <bug_appear_baseline>` 命令验证成功）：可为本地/远程分支、tag、SHA、远端 ref 等。若无法解析，向用户提示 `当前仓库无法解析「${bug_appear_baseline}」为 branch/tag/commit，请改用存在的 ref 或完整 SHA，若为版本号请先确认已打对应 tag`，要求用户重新输入，直到可被解析为止，进入下一个问题
 
 ### Q2：bug出现时间（必填）
 
+#### 用户交互
+
 ```
-这个 bug 最早出现在什么时候？什么时候发现的？
+这个 bug 最早出现在什么时候？
 
 输入为空，认为 bug 首次出现在今天。
 ```
 
-**解析字段**：
-- 用户输入记为 bug_appear_time
+#### 解析字段
 
-**验证**：
-- bug_appear_version 为空，则赋值 bug_appear_time 为今天，进入下一个问题
-- bug_appear_version 不为空，需要确认 bug_appear_version 是日期相关概念以及是在今天及以前，否则向用户提示`输入的时间不合法，请重新输入`，要求用户重新输入，直到用户输入的 bug_appear_version 符合要求，进入下一个问题
+- 用户输入记为 `bug_appear_time`
+
+#### 验证
+
+- `bug_appear_time` 为空，则赋值 `bug_appear_time` 为今天，进入下一个问题
+- `bug_appear_time` 不为空，需要确认 `bug_appear_time` 是日期相关概念且是在今天及以前，否则向用户提示`输入的时间不合法，请重新输入`，要求用户重新输入，直到用户输入的 `bug_appear_time` 符合要求，进入下一个问题
 
 ### Q3：bug详细描述（必填）
 
-触发此 Skill 时，如果用户的输入有 bug 描述，重复一下描述，并询问：
+#### 用户交互
+
+触发此 Skill 时，如果用户的输入已经有 bug 相关的描述，重复一下描述，并询问：
 
 ```
+---
 ${用户已输入的描述}
+---
 
 这是开始时您对 bug 的描述，还有补充吗？
 
-如果有 禅道 bug / Jira bug / 前端监控警告 的链接，请直接发给我。
+如果有 **禅道**/**Jira**/**前端监控警告** 的链接，请直接发给我。
 ```
 
 触发此 Skill 时，如果用户的输入不含 bug 描述，询问：
@@ -57,23 +76,29 @@ ${用户已输入的描述}
 ```
 请您详细描述 bug 产生的背景和现象，不可为空。
 
-如果有 禅道 bug / Jira bug / 前端监控警告 的链接，请直接发给我。
+如果有 **禅道**/**Jira**/**前端监控警告** 的链接，请一并发给我。
 ```
 
-**解析字段**：
-- 用户两次对 bug 的描述，简单的合并记为 bug_user_desc
+#### 解析字段
 
-**验证**：
-- bug_user_desc 不可为空
+- 用户两次对 bug 的描述，直接合并记为 `bug_user_desc`。比如，开始时用户的输入为 `/help-fix 这个项目在测试环境无法登录了`，之后用户的补充为 `https://zentao.jiandan100.cn/zentao/bug-view-59554.html`，则 `bug_user_desc` 为 `这个项目在测试环境无法登录了。https://zentao.jiandan100.cn/zentao/bug-view-59554.html。`
+
+#### 验证
+
+- `bug_user_desc` 不可为空
 
 ## 汇总确认
 
-```
-好的，我整理一下：
+三个问题都结束后，总结输出以下：
 
-  bug所在版本：${bug_appear_version}
-  bug出现时间：${bug_appear_time}
-  bug详细描述：${bug_user_desc}
-
-这样对吗？确认后我开始分析bug。
 ```
+好的，我整理一下 bug 相关信息：
+
+  **所在基线**：${bug_appear_baseline}
+  **出现时间**：${bug_appear_time}
+  **详细描述**：${bug_user_desc}
+
+对吗？确认后我将开始分析bug。
+```
+
+如果用户表示不对，或者有额外的信息补充，分析用户的输入，然后完善这三个值，并重新让用户确认，直至确认没问题，进入下一流程。
