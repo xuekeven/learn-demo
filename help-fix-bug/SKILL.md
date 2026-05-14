@@ -65,6 +65,6 @@ allowed-tools: Read, Write, Edit, Bash
 - `/help-fix https://jdldoq.jd100.com/checkQuestion?subjectId=3&questionId=61599`
 - 「帮我看看这个 bug，批量导出会卡住」
 - 「帮我看看这个问题，明明有数据列表却是空的」
-- 「帮忙排查一下 [https://jira.jiandan100.cn/jira/browse/JDRW-129337」](https://jira.jiandan100.cn/jira/browse/JDRW-129337」)
-- 「看下这个报错 [https://fe-monitor.jd100.com/easytech/issues/24150?project=10」](https://fe-monitor.jd100.com/easytech/issues/24150?project=10」)
+- 「帮忙排查一下 https://jira.jiandan100.cn/jira/browse/JDRW-129337」
+- 「看下这个报错 https://fe-monitor.jd100.com/easytech/issues/24150?project=10」
 

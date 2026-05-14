@@ -2,20 +2,20 @@
 
 ## 新建分支
 
-使用仓库内脚本 **./tools/create-branch.mjs** 从 comprehend 阶段的 `bug_appear_baseline` 创建修复分支。不要手写 `git checkout -b` 去猜 `fix-`* 名。脚本会以**执行命令时**的本机时间为分支名：`fix-${YYMMDD}-${HHmm}`（如 `fix-260423-2223`），并完成 `git switch -c fix-${YYMMDD}-${HHmm}`。
+使用仓库内脚本 **`tools/create-branch.mjs`** 从 comprehend 阶段的 `bug_appear_baseline` 创建修复分支。不要手写 `git checkout -b` 去猜分支名——脚本会以**执行时**的本机时间自动生成 `fix-${YYMMDD}-${HHmm}`（如 `fix-260423-2223`）并完成切换。
 
 ### Agent 执行要点
 
 在目标仓库根目录执行，或通过 `GCL_REPO_ROOT` / `--cwd` 指定仓库根目录：
 
 ```bash
-node help-fix-bug/tools/create-branch.mjs --base "${bug_appear_baseline}"
+node tools/create-branch.mjs --base "${bug_appear_baseline}"
 ```
 
-- `--base` 对应 Q1：`bug_appear_baseline`（branch / tag / commit / `origin/…`；纯版本号如 `1.2.5` 仅当仓库存在可解析的 tag 时有效，参见脚本注释）。  
-- 若基准只在远端且本地解析失败，可先加 `**--fetch**`。  
-- 工作区不干净且必须继续时：`**--allow-dirty**`。  
-- 仅预览：`**--dry-run**`。
+- `--base`：传入 `bug_appear_baseline`（branch / tag / commit / `origin/…`；形如 `1.2.5` 的版本号仅当仓库存在对应 tag 时有效，详见脚本注释）。
+- 基准只在远端、本地解析失败时：先加 `--fetch`。
+- 工作区有未提交修改必须继续时：加 `--allow-dirty`。
+- 仅预览命令不实际建分支：加 `--dry-run`。
 
 执行成功后准备在新分支上做分析与修改。
 
@@ -50,16 +50,52 @@ node help-fix-bug/tools/create-branch.mjs --base "${bug_appear_baseline}"
   - **禅道**：若部署了开放接口或文档中的 API，用 token/账号按文档拉取 bug 详情（以贵司禅道版本文档为准）。  
   - **前端监控**：是否有「按 issue id 拉详情」的内部 API、或仅 Web 展示，需向平台/基建同学确认；**不要猜测**未文档化的接口。  
   - Agent 动作：仅在用户明确说「已配好 token / 给了调用方式」时，用 **Bash + curl** 或项目已有脚本访问；**不要把 token 写进仓库**。
-3. **自动化请求浏览器**
-  在**本机**用 `./tools/get-link-content` 下的 `get-link-content.mjs` 工具：**macOS** 上默认优先 **Google Chrome for Testing**（`/Applications/Google Chrome for Testing.app/...`），否则再试稳定版 Chrome / Edge / 内置 Chromium；独立 `--user-data-dir` **持久化登录态**。首次在弹出窗口**手动登录**；需要时加 `--wait-stdin` 在终端确认后再抓 DOM。详见该目录下 `README.md`。  
-  - 含 `--use-connect` 时仍可连接**远程调试**已有浏览器（进阶）。  
-  - **不**在仓库中保存密码；Cookie/会话落在本机 user-data 目录。  
-  - Agent 动作：可建议用户按 README 将 **json/文本**贴入对话，或用 **Read** 读用户本机结果文件（**勿**将含内网/隐私内容提交到公开仓库）。
+3. **自动化工具 `tools/get-link-content.mjs`（推荐，默认先用）**
+  使用 **Playwright** 自动抓取报告链接页面（等页面网络稳定后），将 HTML 保存到 `~/.get-link-content-res/<自动命名>.html`，Agent 再用 Read 工具读取分析。执行前须在 `help-fix-bug/` 目录运行过 `npm install`。
+
+  **浏览器选用顺序（自动探测）**：Chrome for Testing → Chrome 稳定版 → Edge → Playwright 内置 Chromium；可用 `--browser` 指定。
+
+  **自动登录检测流程**：
+  - 先以**无头**模式访问 URL（复用 `~/.get-link-content-profile` 中持久化的登录态）
+  - 若检测到登录页 → 自动弹出**有头**浏览器，用户完成登录后回终端按 Enter
+  - 无头重新抓取，HTML 存入 `~/.get-link-content-res/`
+
+  **HTML 文件命名规则**（由 URL 路径推导）：
+  - 禅道：`.../bug-view-59554.html` → `bug-view-59554.html`
+  - Jira：`.../browse/JDRW-129337` → `JDRW-129337.html`
+  - 前端监控：`.../issues/24150` → `issues-24150.html`
+
+  **格式选项（可任意组合，默认仅 `--html`）**：
+
+  | 选项 | 说明 |
+  |---|---|
+  | `--html` | HTML 快照（默认）—— 体积小，AI 读取分析用 |
+  | `--mhtml` | MHTML 快照 —— 内嵌 CSS/图片，本地浏览器打开与原页面视觉一致 |
+  | `--screenshot` | 全页截图（.png）—— 直观，适合视觉核对 |
+
+  Agent 执行示例（在 `help-fix-bug/` 目录）：
+  ```bash
+  # 默认：保存 HTML 到 ~/.get-link-content-res/
+  node tools/get-link-content.mjs "<报告链接>"
+
+  # 同时保存 MHTML + 截图（供人工视觉核对）
+  node tools/get-link-content.mjs "<报告链接>" --mhtml --screenshot
+
+  # 三种格式均保存，指定输出前缀
+  node tools/get-link-content.mjs "<报告链接>" --html --mhtml --screenshot --out /tmp/issue
+
+  # 指定浏览器
+  node tools/get-link-content.mjs "<报告链接>" --browser chrome
+  ```
+  - stdout 每行一个已保存文件路径，Agent 用 **Read** 工具读取 HTML 进行分析。
+  - 含内网/隐私内容的结果文件**勿**提交到公开仓库。
+  - 若无法访问（网络不通、登录后仍失败），回退到**办法 1** 让用户手动粘贴。
 
 ### Agent 执行要点
 
-- 先默认执行方法3，如果发现报告链接但**无法**获得正文时：说明**原因**（如需登录），并立即走 **办法 1** 向用户索取要点，暂时不用 **办法 2** ，不要空转分析。  
-- 拿到内容后：区分**事实**（链接里写的）与**推断**（根据代码推出的），再进入「综合分析」。
+- **优先使用办法 3**（自动化工具）；抓取失败时说明原因，立即走 **办法 1** 向用户索取内容，不要空转。
+- **暂不主动使用办法 2**，除非用户明确表示已配好 API Token。
+- 拿到内容后：区分**事实**（链接里写的）与**推断**（从代码推出的），再进入「综合分析」。
 
 ### 用户交互
 
