@@ -45,12 +45,35 @@ tools 目录下只有 `.mjs` 脚本，不含其他配置文件（依赖统一在
 
 从指定 Git 基线（分支 / tag / commit）创建修复分支，分支名自动按 `fix-YYMMDD-HHmm` 格式生成。
 
+- 未知参数、重复的 `--base` / `--prefix` / `--cwd`，以及这些参数缺值时，脚本会直接报错退出。
+- `--fetch --dry-run` 只预览命令，不会真实更新远端引用；如果目标 ref 需要先 `fetch` 才能在本地解析，脚本会打印提示而不是误报创建失败。
+
 ```bash
 # 在目标仓库根目录运行
 node path/to/help-fix-bug/tools/create-branch.mjs --base main
 node path/to/help-fix-bug/tools/create-branch.mjs --base v1.2.5 --dry-run
 node path/to/help-fix-bug/tools/create-branch.mjs --help
 ```
+
+参数说明：
+
+| 参数 | 说明 |
+|------|------|
+| `--base <ref>` | 必选。修复分支的起点；可传分支名、tag、commit SHA、`origin/xxx`。若传 `1.2.5` 这类版本号，会额外尝试同名 tag、`v1.2.5`、`refs/tags/*` |
+| `--prefix <s>` | 分支名前缀，默认 `fix`；最终分支名格式为 `prefix-YYMMDD-HHmm` |
+| `--cwd <path>` | 指定目标 git 仓库目录；默认当前目录，也可用环境变量 `GCL_REPO_ROOT` 提供默认值 |
+| `--fetch` | 建分支前先执行 `git fetch --prune`，适合基线在远端且本地 refs 可能过旧时使用 |
+| `--dry-run` | 只打印将要执行的 git 命令，不真正创建和切换分支 |
+| `--allow-dirty` | 默认工作区有未提交修改会拒绝执行；加上这个参数后允许在 dirty worktree 上继续 |
+| `-h`, `--help` | 打印帮助并退出 |
+
+补充说明：
+
+| 行为 | 说明 |
+|------|------|
+| 参数校验 | 未知参数、重复的 `--base` / `--prefix` / `--cwd`，以及这些参数缺值时，脚本会直接报错退出 |
+| `--fetch --dry-run` | 只预览命令，不会真实更新远端引用；如果目标 ref 需要先 `fetch` 才能在本地解析，脚本会打印提示而不是误报创建失败 |
+| 时间来源 | 分支名中的 `YYMMDD-HHmm` 取执行脚本时的本地时间 |
 
 ### `tools/get-link-content.mjs`
 
@@ -65,27 +88,77 @@ node path/to/help-fix-bug/tools/create-branch.mjs --help
 3. 关闭有头浏览器（登录 Cookie 已写入 `userDataDir`），**无头**重新抓取
 
 ```bash
-# 在 help-fix-bug/ 目录下运行（已 npm install）
+# 在 help-fix-bug/ 目录下运行（已 pnpm install）
 node tools/get-link-content.mjs --url "https://jira.example.com/browse/XX-1"
 node tools/get-link-content.mjs "https://zentao.example.com/zentao/bug-view-1.html" --mhtml --screenshot
 node tools/get-link-content.mjs "https://zentao.example.com/zentao/bug-view-1.html" --out /tmp/issue
 node tools/get-link-content.mjs --help
+node tools/get-link-content.mjs --html --mhtml --screenshot --url "https://zentao.jiandan100.cn/zentao/bug-view-59434.html"
+node tools/get-link-content.mjs --html --mhtml --screenshot --url "https://fe-monitor.jd100.com/easytech/issues/28287?project=8"
+node tools/get-link-content.mjs --html --mhtml --screenshot --url "https://jira.jiandan100.cn/jira/browse/JDRW-130833"
 ```
 
-常用参数：
+参数说明：
+
+| 参数 | 说明 |
+|------|------|
+| `<URL>` | 位置参数。目标地址，必须是 `http://` 或 `https://`；与 `--url <URL>` 二选一 |
+| `--url <URL>` | 显式传 URL，和位置参数等价 |
+| `-h`, `--help` | 打印帮助并退出 |
+
+输出与目录：
+
+| 参数 | 说明 |
+|------|------|
+| `--out <stem>` | 指定输出前缀；脚本会自动追加 `.html` / `.mhtml` / `.png` |
+| `--res-dir <path>` | 未指定 `--out` 时，结果文件保存到该目录；默认取环境变量 `GCL_RES_DIR`，否则为 `~/.get-link-content-res` |
+
+输出格式：
 
 | 参数 | 说明 |
 |------|------|
 | `--html` | 保存 HTML 快照；默认启用。禅道页面会额外下载图片到同名 `.assets/` 目录 |
 | `--mhtml` | 保存 MHTML 快照；禅道页面暂不支持，会打印提示并跳过 |
 | `--screenshot` | 保存整页 PNG 截图 |
-| `--out <stem>` | 指定输出前缀；脚本会自动追加 `.html` / `.mhtml` / `.png` |
+
+浏览器与登录态：
+
+| 参数 / 环境变量 | 说明 |
+|------|------|
+| `--browser <path|name>` | 指定浏览器。可传绝对路径，或 `chrome-for-testing`、`chrome`、`edge`、`msedge`、`chromium` |
+| `--user-data-dir <path>` | 指定独立的 Playwright 持久化 profile 目录，用于复用登录态；默认取环境变量 `GCL_USER_DATA_DIR`，否则为 `~/.get-link-content-profile` |
+| `GCL_EXECUTABLE_PATH` | 环境变量。强制浏览器可执行文件路径，优先级高于 `--browser` 和自动探测 |
+| `GCL_USER_DATA_DIR` | 环境变量。未传 `--user-data-dir` 时，作为默认登录态目录 |
+| `GCL_RES_DIR` | 环境变量。未传 `--res-dir` 时，作为默认结果目录 |
+
+页面加载与模式：
+
+| 参数 | 说明 |
+|------|------|
 | `--wait-until <event>` | `page.goto` 等待事件，默认 `domcontentloaded` |
+| `--timeout-ms <n>` | 导航超时，默认 `60000` 毫秒 |
 | `--headed` | 始终有头模式（手动操作后按 Enter 再抓取） |
 | `--headless` | 始终无头，跳过登录检测 |
-| `--extra-wait-ms <n>` | 导航后额外等待（适合懒加载 SPA） |
-| `GCL_EXECUTABLE_PATH` | 环境变量：覆盖浏览器可执行文件路径 |
-| `GCL_USER_DATA_DIR` | 环境变量：登录态持久化目录，默认 `~/.get-link-content-profile` |
+| `--extra-wait-ms <n>` | 导航后额外等待，默认 `3000`（适合懒加载 SPA） |
+
+补充说明：
+
+| 行为 | 说明 |
+|------|------|
+| 默认格式 | 若 `--html` / `--mhtml` / `--screenshot` 三者都未显式传入，则默认只保存 `--html` |
+| 浏览器选用顺序 | 未传 `--browser` 且未设置 `GCL_EXECUTABLE_PATH` 时，会依次尝试 Chrome for Testing → Chrome Stable → Chrome channel → Edge channel → Playwright bundled Chromium |
+| 自动登录检测 | 默认先无头访问 URL；若识别为登录页，会自动弹出有头浏览器让用户登录，再切回无头重新抓取 |
+| 成功输出 | 成功时每个生成文件路径会打印到 `stdout`；`stderr` 会输出最终 URL、页面标题和各文件大小摘要 |
+
+### `tools/doctor.mjs`
+
+快速自检本机是否满足 Skill 运行条件：Node.js、git、当前目录 git 仓库状态、`playwright` 依赖、浏览器可执行文件命中情况。
+
+```bash
+cd help-fix-bug
+node tools/doctor.mjs
+pnpm run doctor
+```
 
 ## 安装（首次使用）
 
@@ -93,7 +166,8 @@ node tools/get-link-content.mjs --help
 
 ```bash
 cd help-fix-bug
-npm install
+pnpm install
+pnpm run doctor
 ```
 
 ## 目录结构
@@ -102,7 +176,7 @@ npm install
 help-fix-bug/
 ├── SKILL.md                 # Cursor Skill 入口（触发条件、工作流索引）
 ├── README.md                # 本文件
-├── package.json             # Node 依赖（playwright）
+├── package.json             # Node 依赖与 doctor 脚本
 ├── prompts/
 │   ├── comprehend.md        # 步骤 1：了解 Bug
 │   ├── analyze.md           # 步骤 2：分析 Bug
@@ -110,6 +184,7 @@ help-fix-bug/
 │   └── summarize.md         # 步骤 4：总结 Bug
 └── tools/
     ├── create-branch.mjs    # 创建修复分支
+    ├── doctor.mjs           # 自检运行环境
     └── get-link-content.mjs # 抓取报告链接内容
 ```
 

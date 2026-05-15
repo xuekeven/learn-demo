@@ -1,27 +1,59 @@
 #!/usr/bin/env node
 /**
- * create-branch.mjs — 供 help-fix-bug Skill 使用：在当前 git 仓库中，基于指定基准 ref
- * 新建修复分支，分支名符合 analyze.md 约定：fix-YYMMDD-HHmm（年月日、时分取「执行本脚本时」的本地时间）。
+ * create-branch.mjs
+ * 在当前 git 仓库中，基于指定基准 ref 新建修复分支；分支名符合 analyze.md 约定：
+ * fix-YYMMDD-HHmm（年月日、时分取「执行本脚本时」的本地时间）。
  *
- * 示例（与文档一致）：
+ * ── 命令行参数（与 parseArgs 一致） ──
+ *   -h, --help             打印帮助并退出（0）
+ *
+ *   必选：
+ *   --base <ref>           bug_appear_baseline：分支名、tag、SHA、origin/xxx
+ *                          若为 x.y.z 形式，会额外尝试同名 tag / v 前缀 / refs/tags/*
+ *
+ *   可选：
+ *   --prefix <s>           分支名前缀，默认 fix（得到 fix-YYMMDD-HHmm）
+ *   --cwd <path>           git 仓库根目录，默认当前目录；也可用环境变量 GCL_REPO_ROOT
+ *   --fetch                先执行 git fetch --prune（需网络与远程配置）
+ *   --dry-run              只打印将要执行的命令，不真正建分支
+ *   --allow-dirty          工作区有未提交修改时仍继续（默认会拒绝，防止基线误判）
+ *
+ * ── 参数约束 ──
+ *   --base / --prefix / --cwd 只能传一次；缺值、重复、未知参数都会直接报错退出。
+ *   --fetch --dry-run 只预览命令，不会真实更新远端引用；若目标 ref 需 fetch 后才能解析，
+ *   会打印“真实执行时将先 fetch 再解析”的提示，而不是误报创建失败。
+ *
+ * ── 起点 ref 解析规则 ──
+ *   bug_appear_baseline 若仅为「版本号」字符串（如 1.2.5），本脚本会依次尝试与同仓库内
+ *   git tag/分支的常见命名对齐（例如 1.2.5、v1.2.5、refs/tags/…）。
+ *   若仓库中不存在可解析对象，则需改用 commit SHA、分支名，或先为该版本打 tag。
+ *
+ * ── 前置条件 ──
+ *   当前工作目录须在某 git 工作区内（或设置环境变量 GCL_REPO_ROOT）。
+ *   默认若存在未提交的本地修改会直接退出；可加 --allow-dirty 跳过该检查。
+ *
+ * 示例：
+ *   node tools/create-branch.mjs --base <bug_appear_baseline>
+ *   node tools/create-branch.mjs --base main
+ *   node tools/create-branch.mjs --base 1.2.5 --dry-run
+ *
+ * 分支名示例：
  *   若在 2026-04-23 22:23 本地时间执行，且前缀为 fix，则分支名为 fix-260423-2223。
- *
- * 用法：
- *   node create-branch.mjs --base <bug_appear_baseline>
- *   node create-branch.mjs --base main
- *   node create-branch.mjs --base 1.2.5          # 若存在 tag v1.2.5 / 1.2.5 等会自动尝试解析
- *
- * 前置条件：
- * - 当前工作目录须在某 git 工作区内（或设置环境变量 GCL_REPO_ROOT）。
- * - 默认若存在未提交的本地修改会直接退出（避免误以为基线干净）；可加 --allow-dirty 跳过该检查。
- *
- * bug_appear_baseline 若仅为「版本号」字符串（如 1.2.5），本脚本会依次尝试与同仓库内 **git tag/分支**
- * 的常见命名对齐（例如 1.2.5、v1.2.5、refs/tags/…）；若从未打 tag、也没有同名分支，
- * Git 无法解析起点，则需改用 **commit SHA**、**分支名**，或先在仓库中为该版本打上 tag 再执行。
  */
 import process from "node:process";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
+
+const KNOWN_FLAGS = new Set([
+  "-h",
+  "--help",
+  "--base",
+  "--prefix",
+  "--dry-run",
+  "--allow-dirty",
+  "--fetch",
+  "--cwd",
+]);
 
 /** 两位数补零 */
 function pad2(n) {
@@ -96,6 +128,20 @@ function resolveBaseRef(cwd, base) {
   return null;
 }
 
+function parseError(message) {
+  const err = new Error(message);
+  err.isUsageError = true;
+  return err;
+}
+
+function readOptionValue(argv, index, flag) {
+  const next = argv[index + 1];
+  if (!next || KNOWN_FLAGS.has(next)) {
+    throw parseError(`error: ${flag} 缺少参数值`);
+  }
+  return next;
+}
+
 function parseArgs(argv) {
   const out = {
     base: null,
@@ -108,15 +154,40 @@ function parseArgs(argv) {
       : process.cwd(),
     help: false,
   };
+  const seenValueFlags = new Set();
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === "-h" || a === "--help") out.help = true;
-    else if (a === "--base" && argv[i + 1]) out.base = argv[++i];
-    else if (a === "--prefix" && argv[i + 1]) out.prefix = argv[++i];
+    else if (a === "--base") {
+      if (seenValueFlags.has(a)) {
+        throw parseError("error: --base 只能传一次");
+      }
+      out.base = readOptionValue(argv, i, a);
+      seenValueFlags.add(a);
+      i += 1;
+    }
+    else if (a === "--prefix") {
+      if (seenValueFlags.has(a)) {
+        throw parseError("error: --prefix 只能传一次");
+      }
+      out.prefix = readOptionValue(argv, i, a);
+      seenValueFlags.add(a);
+      i += 1;
+    }
     else if (a === "--dry-run") out.dryRun = true;
     else if (a === "--allow-dirty") out.allowDirty = true;
     else if (a === "--fetch") out.fetchFirst = true;
-    else if (a === "--cwd" && argv[i + 1]) out.cwd = resolve(argv[++i]);
+    else if (a === "--cwd") {
+      if (seenValueFlags.has(a)) {
+        throw parseError("error: --cwd 只能传一次");
+      }
+      out.cwd = resolve(readOptionValue(argv, i, a));
+      seenValueFlags.add(a);
+      i += 1;
+    }
+    else {
+      throw parseError(`error: 不支持的参数 ${a}`);
+    }
   }
   return out;
 }
@@ -142,7 +213,17 @@ function printHelp() {
 }
 
 function main() {
-  const opts = parseArgs(process.argv);
+  let opts;
+  try {
+    opts = parseArgs(process.argv);
+  } catch (error) {
+    if (error?.isUsageError) {
+      process.stderr.write(`${error.message}\n`);
+      printHelp();
+      process.exit(1);
+    }
+    throw error;
+  }
   if (opts.help) {
     printHelp();
     process.exit(0);
@@ -164,9 +245,19 @@ function main() {
     }
   }
 
+  const branchName = makeBranchName(opts.prefix);
+
   // 解析 base：分支、远程分支、SHA、标签名；若为 x.y.z 形式会额外尝试 v 前缀与 refs/tags/
   const resolved = resolveBaseRef(opts.cwd, opts.base);
   if (!resolved) {
+    if (opts.dryRun && opts.fetchFirst) {
+      process.stdout.write(
+        `[dry-run] git -C ${opts.cwd} switch -c ${branchName} <resolved-after-fetch:${opts.base}>\n` +
+          `          # 当前本地尚无法解析 ${opts.base}；真实执行时会先 fetch，再重新解析起点\n`
+      );
+      process.exit(0);
+    }
+
     const tried = candidateRefsForBase(opts.base).join(", ");
     process.stderr.write(
       `error: 无法解析 --base ${opts.base}\n` +
@@ -189,8 +280,6 @@ function main() {
       process.exit(2);
     }
   }
-
-  const branchName = makeBranchName(opts.prefix);
 
   // 使用解析得到的 commit SHA 作为起点，避免「仅标签有别名」时的歧义
   const args = ["switch", "-c", branchName, resolved.sha];

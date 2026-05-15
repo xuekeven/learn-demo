@@ -27,7 +27,7 @@
  *   页面加载（传给 Playwright page.goto）：
  *   --wait-until <event>   load | domcontentloaded | networkidle | commit，默认 domcontentloaded
  *   --timeout-ms <n>       导航超时（毫秒），默认 60000
- *   --extra-wait-ms <n>    goto 成功后再额外等待（毫秒），适合懒加载/慢 SPA
+ *   --extra-wait-ms <n>    goto 成功后再额外等待（毫秒），默认 3000，适合懒加载/慢 SPA
  *
  *   模式：
  *   --headed               全程有头：打开窗口 → 用户操作后按 Enter → 再保存（不走「先无头判登录」）
@@ -68,15 +68,19 @@ import { join, extname, dirname, basename } from "node:path";
 import { pathToFileURL } from "node:url";
 import { writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { createInterface } from "node:readline";
-import { chromium } from "playwright";
 
 // ─── 常量 ────────────────────────────────────────────────────────────────────
 
 const DEFAULT_USER_DATA_DIR = join(homedir(), ".get-link-content-profile");
 const DEFAULT_RES_DIR       = join(homedir(), ".get-link-content-res");
 const DEFAULT_WAIT_UNTIL    = "domcontentloaded";
+const DEFAULT_EXTRA_WAIT_MS = 3_000;
 const VALID_WAIT_UNTIL      = ["load", "domcontentloaded", "networkidle", "commit"];
 const KNOWN_OUTPUT_EXTS     = new Set([".html", ".mhtml", ".png"]);
+const PLAYWRIGHT_INSTALL_HINT =
+  "未安装 playwright。请先在 help-fix-bug/ 目录执行：\n" +
+  "  pnpm install\n" +
+  "若已安装，请确认当前脚本所在目录的 node_modules 未被清理。";
 
 /** Chrome for Testing 可执行文件 —— 各平台 */
 const CHROME_FOR_TESTING = {
@@ -100,6 +104,21 @@ const LOGIN_URL_RE   = /[/?=&](login|signin|sign[-_]in|auth|sso|passport|oauth|c
 const LOGIN_TITLE_RE = /登[录陆]|login|sign[\s-]*in/i;
 
 // ─── 浏览器探测 ───────────────────────────────────────────────────────────────
+
+let chromiumPromise = null;
+
+async function getChromium() {
+  if (!chromiumPromise) {
+    chromiumPromise = import("playwright")
+      .then(mod => mod.chromium)
+      .catch(error => {
+        throw new Error(
+          `${PLAYWRIGHT_INSTALL_HINT}\n原始错误：${error?.message ?? String(error)}`
+        );
+      });
+  }
+  return chromiumPromise;
+}
 
 function findFirst(paths) {
   const arr = Array.isArray(paths) ? paths : [paths];
@@ -171,6 +190,7 @@ function resolveBrowserCandidates(browserArg) {
  * 按候选列表依次尝试启动 Playwright 持久化上下文，返回第一个成功的。
  */
 async function launchContext(userDataDir, headless, candidates) {
+  const chromium = await getChromium();
   const baseArgs = [
     "--no-first-run",
     "--no-default-browser-check",
@@ -493,7 +513,7 @@ async function withPage(url, userDataDir, candidates, opts, callback) {
   const {
     waitUntil    = DEFAULT_WAIT_UNTIL,
     timeoutMs    = 60_000,
-    extraWaitMs  = 0,
+    extraWaitMs  = DEFAULT_EXTRA_WAIT_MS,
     forceHeaded  = false,
     forceHeadless = false,
   } = opts;
@@ -636,7 +656,7 @@ function parseArgs(argv) {
     // 页面加载选项
     waitUntil:     DEFAULT_WAIT_UNTIL,
     timeoutMs:     60_000,
-    extraWaitMs:   0,
+    extraWaitMs:   DEFAULT_EXTRA_WAIT_MS,
     forceHeaded:   false,
     forceHeadless: false,
     help:          false,
@@ -746,7 +766,7 @@ function printHelp() {
 页面加载（page.goto）:
   --wait-until <event>      load | domcontentloaded | networkidle | commit（默认 domcontentloaded）
   --timeout-ms <n>         导航超时毫秒，默认 60000
-  --extra-wait-ms <n>       导航成功后再等待毫秒（懒加载/慢页）
+  --extra-wait-ms <n>       导航成功后再等待毫秒（懒加载/慢页），默认 3000
 
 模式:
   --headed                   全程有头：窗口打开 → 操作完成后按 Enter → 保存（不先无头判登录）
