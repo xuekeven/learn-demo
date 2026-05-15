@@ -54,7 +54,9 @@ node path/to/help-fix-bug/tools/create-branch.mjs --help
 
 ### `tools/get-link-content.mjs`
 
-用 **Playwright** 抓取报告链接页面内容，输出 `title`、`innerText`、`outerHTML` 供 AI 分析。
+用 **Playwright** 抓取报告链接页面内容，并保存 HTML / MHTML / PNG 文件供 AI 分析或人工核对。
+
+对于禅道的壳页式页面，脚本会优先抓运行中的 iframe 内页：`--html` 保存 iframe DOM 并把页面内图片下载到同名 `.assets/` 目录，`--screenshot` 保存 iframe 画面，`--mhtml` 暂不支持并会打印提示跳过。
 
 **自动登录检测**：
 
@@ -64,8 +66,9 @@ node path/to/help-fix-bug/tools/create-branch.mjs --help
 
 ```bash
 # 在 help-fix-bug/ 目录下运行（已 npm install）
-node tools/get-link-content.mjs --url "https://jira.example.com/browse/XX-1" --out /tmp/issue.json
-node tools/get-link-content.mjs "https://zentao.example.com/zentao/bug-view-1.html" --format text
+node tools/get-link-content.mjs --url "https://jira.example.com/browse/XX-1"
+node tools/get-link-content.mjs "https://zentao.example.com/zentao/bug-view-1.html" --mhtml --screenshot
+node tools/get-link-content.mjs "https://zentao.example.com/zentao/bug-view-1.html" --out /tmp/issue
 node tools/get-link-content.mjs --help
 ```
 
@@ -73,8 +76,11 @@ node tools/get-link-content.mjs --help
 
 | 参数 | 说明 |
 |------|------|
-| `--format json\|text\|html` | 输出格式，默认 `json` |
-| `--out <file>` | 写入文件，否则输出到 stdout |
+| `--html` | 保存 HTML 快照；默认启用。禅道页面会额外下载图片到同名 `.assets/` 目录 |
+| `--mhtml` | 保存 MHTML 快照；禅道页面暂不支持，会打印提示并跳过 |
+| `--screenshot` | 保存整页 PNG 截图 |
+| `--out <stem>` | 指定输出前缀；脚本会自动追加 `.html` / `.mhtml` / `.png` |
+| `--wait-until <event>` | `page.goto` 等待事件，默认 `domcontentloaded` |
 | `--headed` | 始终有头模式（手动操作后按 Enter 再抓取） |
 | `--headless` | 始终无头，跳过登录检测 |
 | `--extra-wait-ms <n>` | 导航后额外等待（适合懒加载 SPA） |
@@ -111,4 +117,4 @@ help-fix-bug/
 
 - 不在仓库中存储账号密码、Cookie、API Token
 - `get-link-content.mjs` 的登录态仅落在本机 `userDataDir`（默认 `~/.get-link-content-profile`）
-- 含内网地址或业务细节的抓取结果（`/tmp/issue.json` 等）**不要提交到公开仓库**
+- 含内网地址或业务细节的抓取结果（如 `/tmp/issue.html`、`/tmp/issue.mhtml`）**不要提交到公开仓库**

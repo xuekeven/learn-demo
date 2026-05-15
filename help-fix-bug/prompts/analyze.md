@@ -51,9 +51,10 @@ node tools/create-branch.mjs --base "${bug_appear_baseline}"
   - **前端监控**：是否有「按 issue id 拉详情」的内部 API、或仅 Web 展示，需向平台/基建同学确认；**不要猜测**未文档化的接口。  
   - Agent 动作：仅在用户明确说「已配好 token / 给了调用方式」时，用 **Bash + curl** 或项目已有脚本访问；**不要把 token 写进仓库**。
 3. **自动化工具 `tools/get-link-content.mjs`（推荐，默认先用）**
-  使用 **Playwright** 自动抓取报告链接页面（等页面网络稳定后），将 HTML 保存到 `~/.get-link-content-res/<自动命名>.html`，Agent 再用 Read 工具读取分析。执行前须在 `help-fix-bug/` 目录运行过 `npm install`。
+  使用 **Playwright** 自动抓取报告链接页面（等待页面进入目标加载阶段，并可按需额外等待），默认将 HTML 保存到 `~/.get-link-content-res/<自动命名>.html`，Agent 再用 Read 工具读取分析。执行前须在 `help-fix-bug/` 目录运行过 `npm install`。
+  对于禅道这类外层壳页 + iframe 内容页结构，脚本会优先抓 iframe 内的实际页面内容：`--html` 保存 iframe DOM，并把页面内图片下载到同名 `.assets/` 目录；`--screenshot` 保存 iframe 画面；`--mhtml` 暂不支持，会打印提示并跳过。
 
-  **浏览器选用顺序（自动探测）**：Chrome for Testing → Chrome 稳定版 → Edge → Playwright 内置 Chromium；可用 `--browser` 指定。
+  **浏览器选用顺序（自动探测）**：Chrome for Testing → Chrome 稳定版 → Chrome channel → Edge channel → Playwright 内置 Chromium；可用 `--browser` 指定。
 
   **自动登录检测流程**：
   - 先以**无头**模式访问 URL（复用 `~/.get-link-content-profile` 中持久化的登录态）
@@ -69,9 +70,14 @@ node tools/create-branch.mjs --base "${bug_appear_baseline}"
 
   | 选项 | 说明 |
   |---|---|
-  | `--html` | HTML 快照（默认）—— 体积小，AI 读取分析用 |
-  | `--mhtml` | MHTML 快照 —— 内嵌 CSS/图片，本地浏览器打开与原页面视觉一致 |
+  | `--html` | HTML 快照（默认）—— 体积小，AI 读取分析用；禅道页面会额外保存图片资源 |
+  | `--mhtml` | MHTML 快照；禅道页面暂不支持，会打印提示并跳过 |
   | `--screenshot` | 全页截图（.png）—— 直观，适合视觉核对 |
+
+  **默认加载策略**：
+  - `page.goto` 默认使用 `--wait-until domcontentloaded`
+  - 页面若还有异步内容，再按需追加 `--extra-wait-ms`
+  - 只有确实需要等到更晚阶段时，才显式改成 `--wait-until load` 或 `networkidle`
 
   Agent 执行示例（在 `help-fix-bug/` 目录）：
   ```bash
