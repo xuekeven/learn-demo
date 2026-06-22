@@ -19,14 +19,14 @@ allowed-tools: Read, Write, Edit, Bash
 
 - 禅道：`https://zentao.jiandan100.cn/zentao/bug-view-*.html`  
 示例：`https://zentao.jiandan100.cn/zentao/bug-view-59554.html`
-- Jira：`https://jira.jiandan100.cn/jira/browse/JDRW-`*  
+- Jira：`https://jira.jiandan100.cn/jira/browse/JDRW-*`  
 示例：`https://jira.jiandan100.cn/jira/browse/JDRW-129337`
-- 前端监控警告：`https://fe-monitor.jd100.com/easytech/issues/*?project=`*  
+- 前端监控警告：`https://fe-monitor.jd100.com/easytech/issues/*?project=*`  
 示例：`https://fe-monitor.jd100.com/easytech/issues/24150?project=10`
 
 **产品链接**（`*` 表示可变片段）：
 
-- `https://*.jd100.com/`*（子域名为占位，路径与查询串可变）  
+- `https://*.jd100.com/*`（子域名为占位，路径与查询串可变）  
 示例：`https://jdldoq.jd100.com/checkQuestion?subjectId=3&questionId=61599`
 
 若用户明确只要解释概念、不要做排查，则不要强行套本流程。
