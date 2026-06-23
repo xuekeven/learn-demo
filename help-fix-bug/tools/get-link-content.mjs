@@ -32,6 +32,7 @@
  *   模式：
  *   --headed               全程有头：打开窗口 → 用户操作后按 Enter → 再保存（不走「先无头判登录」）
  *   --headless             始终无头，不检测登录页，直接抓取（需已有 Cookie 或页面无需登录）
+ *   --debug                输出更详细的调试日志（浏览器候选、跳转阶段、登录检测结果、失败栈）
  *
  *   环境变量（可被 CLI 覆盖或作为默认）：
  *   GCL_EXECUTABLE_PATH    强制浏览器可执行文件路径（最高优先，覆盖 --browser 探测）
@@ -272,6 +273,12 @@ async function detectLoginPage(page) {
 // ─── 核心：打开页面，把 page 传给 callback ────────────────────────────────────
 
 function waitForEnter(prompt) {
+  if (!process.stdin.isTTY) {
+    throw new Error(
+      "当前执行环境不是交互式终端，无法等待你在浏览器中登录后按 Enter 继续。" +
+      "请改为在本机终端执行 `--headed` 调试，或回退到 Codex 的 Chrome 登录态共享方案。"
+    );
+  }
   return new Promise(resolve => {
     const rl = createInterface({ input: process.stdin, output: process.stderr });
     rl.question(prompt, () => { rl.close(); resolve(); });
@@ -279,6 +286,18 @@ function waitForEnter(prompt) {
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function debugLog(enabled, message) {
+  if (!enabled) return;
+  process.stderr.write(`[debug] ${message}\n`);
+}
+
+async function debugPageState(page, enabled, label) {
+  if (!enabled) return;
+  const url = page.url();
+  const title = await page.title().catch(() => "");
+  process.stderr.write(`[debug] ${label}: url=${url} title=${title}\n`);
+}
 
 function stripKnownOutputExt(stem) {
   const ext = extname(stem).toLowerCase();
@@ -516,8 +535,15 @@ async function withPage(url, userDataDir, candidates, opts, callback) {
     extraWaitMs  = DEFAULT_EXTRA_WAIT_MS,
     forceHeaded  = false,
     forceHeadless = false,
+    debug = false,
   } = opts;
   const gotoOpts = { waitUntil, timeout: timeoutMs };
+  debugLog(debug, `capture start url=${url}`);
+  debugLog(
+    debug,
+    `mode headed=${forceHeaded} headless=${forceHeadless} waitUntil=${waitUntil} timeoutMs=${timeoutMs} extraWaitMs=${extraWaitMs} userDataDir=${userDataDir}`
+  );
+  debugLog(debug, `browser candidates=${candidates.map(c => c._label || c.channel || c.executablePath || "chromium").join(" -> ")}`);
 
   // ── 强制有头 ──
   if (forceHeaded) {
@@ -525,8 +551,10 @@ async function withPage(url, userDataDir, candidates, opts, callback) {
     const ctx = await launchContext(userDataDir, false, candidates);
     try {
       const page = await ctx.newPage();
+      debugLog(debug, "headed mode: page created");
       await page.goto(url, gotoOpts);
       if (extraWaitMs > 0) await sleep(extraWaitMs);
+      await debugPageState(page, debug, "headed after goto");
       await waitForEnter("操作完成后按 Enter 开始保存…\n");
       return await callback(page);
     } finally { await ctx.close().catch(() => {}); }
@@ -538,12 +566,15 @@ async function withPage(url, userDataDir, candidates, opts, callback) {
     let needLogin = false;
     try {
       const page = await ctx.newPage();
+      debugLog(debug, "headless first pass: page created");
       await page.goto(url, gotoOpts);
       if (extraWaitMs > 0) await sleep(extraWaitMs);
+      await debugPageState(page, debug, "headless first pass after goto");
 
       if (forceHeadless) return await callback(page);
 
       needLogin = await detectLoginPage(page);
+      debugLog(debug, `headless first pass detectLoginPage=${needLogin}`);
       if (!needLogin) return await callback(page);
     } finally { await ctx.close().catch(() => {}); }
 
@@ -555,7 +586,9 @@ async function withPage(url, userDataDir, candidates, opts, callback) {
     const headedCtx = await launchContext(userDataDir, false, candidates);
     try {
       const page = await headedCtx.newPage();
+      debugLog(debug, "headed login pass: page created");
       await page.goto(url, { ...gotoOpts, timeout: timeoutMs * 2 }).catch(() => {});
+      await debugPageState(page, debug, "headed login pass after goto");
       await waitForEnter("\n登录完成后按 Enter，脚本将无头重新抓取…\n");
     } finally { await headedCtx.close().catch(() => {}); }
 
@@ -564,9 +597,13 @@ async function withPage(url, userDataDir, candidates, opts, callback) {
     const ctx2 = await launchContext(userDataDir, true, candidates);
     try {
       const page = await ctx2.newPage();
+      debugLog(debug, "headless second pass: page created");
       await page.goto(url, gotoOpts);
       if (extraWaitMs > 0) await sleep(extraWaitMs);
-      if (await detectLoginPage(page)) {
+      await debugPageState(page, debug, "headless second pass after goto");
+      const stillLogin = await detectLoginPage(page);
+      debugLog(debug, `headless second pass detectLoginPage=${stillLogin}`);
+      if (stillLogin) {
         throw new Error("登录后仍检测到登录页，请确认登录成功后重试。");
       }
       return await callback(page);
@@ -659,6 +696,7 @@ function parseArgs(argv) {
     extraWaitMs:   DEFAULT_EXTRA_WAIT_MS,
     forceHeaded:   false,
     forceHeadless: false,
+    debug:         false,
     help:          false,
   };
   const errors = [];
@@ -722,6 +760,7 @@ function parseArgs(argv) {
     }
     else if (a === "--headed")   opts.forceHeaded   = true;
     else if (a === "--headless") opts.forceHeadless = true;
+    else if (a === "--debug")    opts.debug         = true;
     else if (!a.startsWith("-")) setUrl(a, "位置参数");
     else errors.push(`未知参数：${a}`);
   }
@@ -771,6 +810,7 @@ function printHelp() {
 模式:
   --headed                   全程有头：窗口打开 → 操作完成后按 Enter → 保存（不先无头判登录）
   --headless                 始终无头，不检测登录页，直接抓取
+  --debug                    输出详细调试日志；失败时附带更多上下文与错误栈
 
 环境变量:
   GCL_EXECUTABLE_PATH       强制浏览器可执行文件路径（优先于 --browser 与自动探测）
@@ -858,6 +898,7 @@ async function main() {
       extraWaitMs:   opts.extraWaitMs,
       forceHeaded:   opts.forceHeaded,
       forceHeadless: opts.forceHeadless,
+      debug:         opts.debug,
     }, async (page) => {
       return await capturePageOutputs(page, opts.url, {
         waitUntil: opts.waitUntil,
@@ -867,6 +908,9 @@ async function main() {
     });
   } catch (e) {
     process.stderr.write(`抓取失败: ${e?.message || e}\n`);
+    if (opts.debug && e?.stack) {
+      process.stderr.write(e.stack + "\n");
+    }
     process.exit(2);
   }
 

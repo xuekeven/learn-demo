@@ -21,7 +21,7 @@ node tools/create-branch.mjs --base "${bug_appear_baseline}"
 
 ### 用户交互
 
-开始执行前：
+开始执行前，输出模板：
 
 ```
 现在开始分析 bug。
@@ -29,7 +29,7 @@ node tools/create-branch.mjs --base "${bug_appear_baseline}"
 首先从 ${bug_appear_baseline} 新建 fix-<实时年月日>-<实时时分> 分支，在该分支上分析和修复代码。
 ```
 
-执行完成后：
+执行完成后，输出模板：
 
 ```
 新建 fix-<实时年月日>-<实时时分> 分支成功！
@@ -41,71 +41,27 @@ node tools/create-branch.mjs --base "${bug_appear_baseline}"
 
 ### 可行办法
 
-1. **用户粘贴链接内的内容**
-  请用户在**已登录**的浏览器中打开该链接，将页面内与 bug 相关的文字/图片/文档或者页面的DOM节点**复制到对话**（可分段）。若有多条评论或时间线，优先最近与「复现/结论」相关的几条。  
-  - 适用：所有三种链接。  
-  - Agent 动作：若当前仍缺关键字段，**明确列出还缺什么**（例如：堆栈、请求参数、禅道附件名、Jira 标签等），请用户补充粘贴。
-2. **用 API token 请求链接**
-  - **Jira**：REST API + API Token / OAuth（需 `jira.jiandan100.cn` 管辖区内的账号与权限），用 `GET` issue 等接口取 JSON，比抓 HTML 可靠。  
-  - **禅道**：若部署了开放接口或文档中的 API，用 token/账号按文档拉取 bug 详情（以贵司禅道版本文档为准）。  
-  - **前端监控**：是否有「按 issue id 拉详情」的内部 API、或仅 Web 展示，需向平台/基建同学确认；**不要猜测**未文档化的接口。  
-  - Agent 动作：仅在用户明确说「已配好 token / 给了调用方式」时，用 **Bash + curl** 或项目已有脚本访问；**不要把 token 写进仓库**。
-3. **自动化工具 `tools/get-link-content.mjs`（推荐，默认先用）**
-  使用 **Playwright** 自动抓取报告链接页面（等待页面进入目标加载阶段，并可按需额外等待），默认将 HTML 保存到 `~/.get-link-content-res/<自动命名>.html`，Agent 再用 Read 工具读取分析。执行前须在 `help-fix-bug/` 目录运行过 `pnpm install`；若不确定环境是否齐全，可先执行 `pnpm run doctor`。
-  对于禅道这类外层壳页 + iframe 内容页结构，脚本会优先抓 iframe 内的实际页面内容：`--html` 保存 iframe DOM，并把页面内图片下载到同名 `.assets/` 目录；`--screenshot` 保存 iframe 画面；`--mhtml` 暂不支持，会打印提示并跳过。
+**使用 Codex 插件在浏览器打开链接**
 
-  **浏览器选用顺序（自动探测）**：Chrome for Testing → Chrome 稳定版 → Chrome channel → Edge channel → Playwright 内置 Chromium；可用 `--browser` 指定。
+使用 **Codex 插件的浏览器控制能力**复用浏览器的现有登录态，只做只读查看，不提交任何内容。
 
-  **自动登录检测流程**：
-  - 先以**无头**模式访问 URL（复用 `~/.get-link-content-profile` 中持久化的登录态）
-  - 若检测到登录页 → 自动弹出**有头**浏览器，用户完成登录后回终端按 Enter
-  - 无头重新抓取，HTML 存入 `~/.get-link-content-res/`
-
-  **HTML 文件命名规则**（由 URL 路径推导）：
-  - 禅道：`.../bug-view-59554.html` → `bug-view-59554.html`
-  - Jira：`.../browse/JDRW-129337` → `JDRW-129337.html`
-  - 前端监控：`.../issues/24150` → `issues-24150.html`
-
-  **格式选项（可任意组合，默认仅 `--html`）**：
-
-  | 选项 | 说明 |
-  |---|---|
-  | `--html` | HTML 快照（默认）—— 体积小，AI 读取分析用；禅道页面会额外保存图片资源 |
-  | `--mhtml` | MHTML 快照；禅道页面暂不支持，会打印提示并跳过 |
-  | `--screenshot` | 全页截图（.png）—— 直观，适合视觉核对 |
-
-  **默认加载策略**：
-  - `page.goto` 默认使用 `--wait-until domcontentloaded`
-  - 默认还会额外等待 `3000ms`；页面若还有异步内容，再按需追加更长的 `--extra-wait-ms`
-  - 只有确实需要等到更晚阶段时，才显式改成 `--wait-until load` 或 `networkidle`
-
-  Agent 执行示例（在 `help-fix-bug/` 目录）：
-  ```bash
-  # 默认：保存 HTML 到 ~/.get-link-content-res/
-  node tools/get-link-content.mjs "<报告链接>"
-
-  # 同时保存 MHTML + 截图（供人工视觉核对）
-  node tools/get-link-content.mjs "<报告链接>" --mhtml --screenshot
-
-  # 三种格式均保存，指定输出前缀
-  node tools/get-link-content.mjs "<报告链接>" --html --mhtml --screenshot --out /tmp/issue
-
-  # 指定浏览器
-  node tools/get-link-content.mjs "<报告链接>" --browser chrome
-  ```
-  - stdout 每行一个已保存文件路径，Agent 用 **Read** 工具读取 HTML 进行分析。
-  - 含内网/隐私内容的结果文件**勿**提交到公开仓库。
-  - 若无法访问（网络不通、登录后仍失败），回退到**办法 1** 让用户手动粘贴。
+- 适用：用户已经在本机使用 Codex 插件可控制的浏览器登录了 Jira / 禅道 / 前端监控系统。
+- 优点：直接共享现有登录态，不需要 Playwright 另维护一份 `userDataDir`，也不依赖 Agent 在非交互终端里完成登录确认。
+- 边界：只读取工单可见内容，不点击提交、编辑、删除、状态流转等会改变服务端数据的控件。
+- Agent 动作：连接 Codex 插件的浏览器能力后，新开或复用一个标签页打开工单链接，只读取与 bug 相关的标题、描述、复现步骤、评论、堆栈、环境和附件说明，完成之后关闭标签页，回到代码分析。
+- 异常处理：如果 Codex 插件能够连接浏览器，但打开链接后页面是登录页、权限错误页、网络错误页或空白页，立即中断链接分析流程，向用户报告异常，让用户处理登录/权限/网络问题或决策下一步。
 
 ### Agent 执行要点
 
-- **优先使用办法 3**（自动化工具）；抓取失败时说明原因，立即走 **办法 1** 向用户索取内容，不要空转。
-- **暂不主动使用办法 2**，除非用户明确表示已配好 API Token。
+- 只使用 Codex 插件的浏览器登录态共享方案读取报告链接内容。
+- 不主动要求用户粘贴页面内容。
+- 不主动使用 API token、curl 或未文档化接口请求报告链接。
+- 不主动调用 `tools/get-link-content.mjs` 抓取报告链接；该工具代码保留在仓库中，仅作为手动调试/历史兼容工具，不作为本流程的执行路径。
 - 拿到内容后：区分**事实**（链接里写的）与**推断**（从代码推出的），再进入「综合分析」。
 
 ### 用户交互
 
-成功：
+成功后，输出模板：
 
 ```
 已成功获取到 ${报告链接} 里的具体信息。
@@ -135,15 +91,24 @@ node tools/create-branch.mjs --base "${bug_appear_baseline}"
 分析完成之后向用户输出 bug 原因和复现路径（如有），要求用户手动复现 bug 并询问 bug 原因是否正确，如果正确，进入下一流程；否则根据用户的回答，视情况进一步分析（分析方向正常）或者重新从头分析（分析方向错误），继续查找和确定原因。
 
 输出原则：
+
 - **结论优先**：开头写「最可能根因」再给证据链。  
 - **代码引用**：使用工作区要求的格式（`startLine:endLine:path`），避免无出处的文件名堆砌。  
 - **阻塞显式写出**：若缺少复现、权限、接口样例，说明**缺什么**与**下一步**，不要假装已定位。  
 - **禁止**：为凑结论而臆造未读过的 API/文件；大段与当前 bug 无关的泛读总结。
 
+输出模板：
+
 ```
 分析结果如下：
 
-${原因和复现路径}
+**原因**
+
+${原因}
+
+**复现**
+
+${复现}
 
 请你手动复现 bug，并告知我 bug 原因是否正确。
 ```

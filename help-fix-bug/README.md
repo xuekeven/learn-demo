@@ -11,13 +11,13 @@
 | 步骤 | 文档 | 说明 |
 |------|------|------|
 | 1. 了解 Bug | `prompts/comprehend.md` | 向用户收集代码基线、出现时间、Bug 描述 |
-| 2. 分析 Bug | `prompts/analyze.md` | 新建修复分支，获取报告链接内容，系统分析根因 |
+| 2. 分析 Bug | `prompts/analyze.md` | 新建修复分支，通过 Codex 插件共享浏览器登录态读取报告链接内容，系统分析根因 |
 | 3. 修复 Bug | `prompts/fix.md` | 提供多方案对比，修改代码，等待用户验证 |
 | 4. 总结 Bug | `prompts/summarize.md` | 生成结构化修复报告（可写入文件留档） |
 
 ## 触发方式
 
-在 Cursor 对话中，以以下任一方式触发：
+在支持 Agent Skill 的对话中，以以下任一方式触发：
 
 ```
 /help-fix <描述或链接>
@@ -36,6 +36,18 @@
 | 禅道 | `https://zentao.jiandan100.cn/zentao/bug-view-*.html` |
 | Jira | `https://jira.jiandan100.cn/jira/browse/JDRW-*` |
 | 前端监控 | `https://fe-monitor.jd100.com/easytech/issues/*?project=*` |
+
+## 报告链接读取方式
+
+分析阶段使用 **Codex 插件的浏览器控制能力** 读取报告链接内容：复用用户当前浏览器里的既有登录态，只做只读查看，不提交、编辑、删除或流转任何页面内容。
+
+执行边界：
+
+- 打开报告链接后，只读取标题、描述、复现步骤、评论、堆栈、环境和附件说明等与 bug 相关的可见信息。
+- 如果页面显示登录、权限错误、网络错误或空白页，立即停止链接分析并向用户报告阻塞点。
+- 不主动要求用户粘贴页面内容。
+- 不主动使用 API token、`curl` 或未文档化接口请求报告链接。
+- 不主动调用 `tools/get-link-content.mjs` 作为分析流程的一部分；该脚本仍保留在仓库中，用于手动调试和历史兼容。
 
 ## 工具（`tools/`）
 
@@ -77,7 +89,7 @@ node path/to/help-fix-bug/tools/create-branch.mjs --help
 
 ### `tools/get-link-content.mjs`
 
-用 **Playwright** 抓取报告链接页面内容，并保存 HTML / MHTML / PNG 文件供 AI 分析或人工核对。
+用 **Playwright** 抓取报告链接页面内容，并保存 HTML / MHTML / PNG 文件供 AI 分析或人工核对。当前 Skill 的分析流程默认不再调用该脚本；它保留为手动调试/历史兼容工具。
 
 对于禅道的壳页式页面，脚本会优先抓运行中的 iframe 内页：`--html` 保存 iframe DOM 并把页面内图片下载到同名 `.assets/` 目录，`--screenshot` 保存 iframe 画面，`--mhtml` 暂不支持并会打印提示跳过。
 
@@ -174,7 +186,7 @@ pnpm run doctor
 
 ```
 help-fix-bug/
-├── SKILL.md                 # Cursor Skill 入口（触发条件、工作流索引）
+├── SKILL.md                 # Agent Skill 入口（触发条件、工作流索引）
 ├── README.md                # 本文件
 ├── package.json             # Node 依赖与 doctor 脚本
 ├── prompts/
