@@ -12,9 +12,9 @@
 模板：
 
 ```
-当前 bug 已修复！是否需要总结沉淀此 bug 为文档，便于工单回填、评审与留档？
+当前 bug 已修复！是否需要总结沉淀此 bug 为文档，便于工单回填、评审与留档？如果需要，请告诉我。
 
-如果需要，请告诉我文档如果命名以及保存在何处。
+默认会以 `bug-report-${YYMMDD}-${HHmm}.md` 作为文档名保存在当前工作区下。如果需要其他的命名方式保存在其他目录，请告诉我。
 ```
 
 ## 文档模板
@@ -67,7 +67,7 @@
 
 | <span style="white-space: nowrap;">项目</span> | 内容 |
 | --- | --- |
-| <span style="white-space: nowrap;">采用方案</span> | ${方案名称及简述} |
+| <span style="white-space: nowrap;">采用方案</span> | ${方案描述} |
 | <span style="white-space: nowrap;">变更摘要</span> | `${path/to/file}`：${改动一两句话}<br />`${path/to/another-file}`：${改动一两句话} |
 | <span style="white-space: nowrap;">未本次修复的同类问题</span> | ${列出或写"无"} |
 
