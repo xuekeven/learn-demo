@@ -1,0 +1,4 @@
+interface:
+  display_name: "小红书商品评价采集"
+  short_description: "采集小红书商品评价并生成购买建议"
+  default_prompt: "/get-red-book-evaluate 总结小红书用户对某个商品的评价，并写出购买建议。"
