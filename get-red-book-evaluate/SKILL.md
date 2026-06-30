@@ -16,7 +16,7 @@ description: 使用 Codex 的 chrome:control-chrome 插件接管 Chrome，在小
 
 1. 按顺序读取 `prompts/` 里的工作流步骤文件。
 2. 每完成一个步骤，都确认该步骤的“完成标准”已经满足。
-3. 必须使用 Codex 的 `chrome:control-chrome` 插件接管 Google Chrome。
+3. 必须通过 Codex 的 `chrome:control-chrome` 插件连接并控制 Google Chrome；不得使用 `computer-use`、独立 Playwright、普通网页搜索或其它浏览器控制方式替代小红书采集。
 4. 必须先做小红书首页、登录态、搜索能力的前置检查；全局阻塞时停止并询问用户，单帖或局部页面限制则记录原因并继续可行采集。
 5. 用新标签页打开每个帖子，最终保留所有已打开的有效帖标签页，并在报告中留下每篇帖子的原始 URL，方便回看。
 6. 采集帖子时模拟人类阅读节奏：每个帖子至少停留 5 秒，用于判断时间/IP、广告属性、正文价值和评论价值。
